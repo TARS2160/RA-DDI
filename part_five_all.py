@@ -317,7 +317,7 @@ class MLPDDI(nn.Module):
         return self.fc(x)
 
 
-# === 2️⃣ GCN-DDI（结构增强版） ===
+# === 2️⃣ GCN-DDI ===
 class GCNLayer(nn.Module):
     def __init__(self, in_dim, out_dim):
         super().__init__()
@@ -352,31 +352,7 @@ class GCN_DDI(nn.Module):
         return self.fc(out)
 
 
-# === 3️⃣ GAT-DDI（带残差和多层注意力） ===
-# class GAT_DDI(nn.Module):
-#     def __init__(self, emb_dim, num_classes, heads=8):
-#         super().__init__()
-#         self.att1 = nn.MultiheadAttention(emb_dim, num_heads=heads, batch_first=True, dropout=0.2)
-#         self.att2 = nn.MultiheadAttention(emb_dim, num_heads=heads, batch_first=True, dropout=0.2)
-#
-#         self.fc = nn.Sequential(
-#             nn.Linear(emb_dim * 2, 512),
-#             nn.BatchNorm1d(512),
-#             nn.ReLU(),
-#             nn.Dropout(0.3),
-#             nn.Linear(512, 256),
-#             nn.ReLU(),
-#             nn.Dropout(0.2),
-#             nn.Linear(256, num_classes)
-#         )
-#
-#     def forward(self, d1_emb, d2_emb):
-#         x = torch.stack([d1_emb, d2_emb], dim=1)
-#         x1, _ = self.att1(x, x, x)
-#         x2, _ = self.att2(x1, x1, x1)
-#         x_out = x2 + x  # 残差连接
-#         return self.fc(x_out.flatten(1))
-# === 3️⃣ 新版 GAT-DDI（多层注意力 + 门控融合 + 残差归一化） ===
+# === 3️⃣ GAT-DDI  ===
 class GAT_DDI(nn.Module):
     def __init__(self, emb_dim, num_classes, heads=8):
         super().__init__()
@@ -423,7 +399,7 @@ class GAT_DDI(nn.Module):
         x_cat = torch.cat([fused, d1_out + d2_out], dim=1)
         return self.fc(x_cat)
 
-# === 4️⃣ SkipGNN-DDI（带残差与融合层） ===
+# === 4️⃣ SkipGNN-DDI ===
 class SkipGNN_DDI(nn.Module):
     def __init__(self, emb_dim, num_classes):
         super().__init__()
@@ -464,45 +440,7 @@ class SkipGNN_DDI(nn.Module):
         fused = self.fusion(out)
         return self.fc_out(fused)
 
-
-# === 5️⃣ KGNN-DDI（关系增强 + 深层全连接） ===
-# class KGNN_DDI(nn.Module):
-#     def __init__(self, emb_dim, num_classes, rel_dim=256):
-#         super().__init__()
-#         self.rel_transform = nn.Sequential(
-#             nn.Linear(emb_dim, rel_dim),
-#             nn.BatchNorm1d(rel_dim),
-#             nn.ReLU(),
-#             nn.Dropout(0.3),
-#             nn.Linear(rel_dim, rel_dim)
-#         )
-#
-#         self.entity_transform = nn.Sequential(
-#             nn.Linear(emb_dim, rel_dim),
-#             nn.BatchNorm1d(rel_dim),
-#             nn.ReLU(),
-#             nn.Dropout(0.3),
-#             nn.Linear(rel_dim, rel_dim)
-#         )
-#
-#         self.fc = nn.Sequential(
-#             nn.Linear(rel_dim * 2, 512),
-#             nn.BatchNorm1d(512),
-#             nn.ReLU(),
-#             nn.Dropout(0.3),
-#             nn.Linear(512, 256),
-#             nn.ReLU(),
-#             nn.Dropout(0.2),
-#             nn.Linear(256, num_classes)
-#         )
-#
-#     def forward(self, d1_emb, d2_emb):
-#         d1_r = self.entity_transform(d1_emb)
-#         d2_r = self.entity_transform(d2_emb)
-#         rel = torch.abs(d1_r - d2_r)
-#         x = torch.cat([rel, d1_r * d2_r], dim=1)
-#         return self.fc(x)
-# === 5️⃣ 新版 KGNN-DDI（门控关系增强 + 残差稳定） ===
+# === 5️⃣ KGNN-DDI ===
 class KGNN_DDI(nn.Module):
     def __init__(self, emb_dim, num_classes, rel_dim=256):
         super().__init__()
