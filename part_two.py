@@ -15,7 +15,7 @@ print(f"使用设备: {device}")
 
 
 # ----------------------------
-# 1. 数据集定义（修复长度不一致问题）
+# 1. 数据集定义
 # ----------------------------
 class DrugDataset(Dataset):
     def __init__(self, smiles_tokens, text_input_ids, text_attention_masks, kg_list, pos_pairs=None, max_smiles_len=50):
@@ -152,10 +152,6 @@ class SimpleDrugEncoder(nn.Module):
         text_emb = text_outputs.last_hidden_state[:, 0, :]
         text_emb = self.text_proj(text_emb)
 
-        # ablation消融实验部分A1，替换文本编码
-        # batch_size = text_ids.size(0)
-        # text_emb = torch.zeros(batch_size, self.text_proj.out_features, device=text_ids.device)
-
         # SMILES编码
         smiles_emb = self.smiles_embedding(smiles_input)
         lstm_out, (hidden, _) = self.smiles_lstm(smiles_emb)
@@ -163,97 +159,24 @@ class SimpleDrugEncoder(nn.Module):
         smiles_emb = self.smiles_proj(smiles_emb)
         smiles_emb = self.layer_norm(smiles_emb)
 
-        # ablation消融实验部分A2，替换SMILES编码
-        # batch_size = smiles_input.size(0)
-        # hidden_dim = self.smiles_proj.out_features
-        # smiles_emb = torch.zeros(batch_size, hidden_dim, device=smiles_input.device)
-
         # KG编码
         kg_emb = self.kg_proj(kg_input)
 
         return text_emb, smiles_emb, kg_emb
 
 
-# class SimpleCrossModalAttention(nn.Module):
-#     def __init__(self, hidden_dim=256):
-#         super().__init__()
-#         self.attention = nn.MultiheadAttention(hidden_dim, num_heads=8, batch_first=True)
-#         self.proj = nn.Linear(hidden_dim, hidden_dim)
-#
-#     def forward(self, text_emb, smiles_emb, kg_emb):
-#         modalities = torch.stack([text_emb, smiles_emb, kg_emb], dim=1)
-#         attended, _ = self.attention(modalities, modalities, modalities)
-#         fused = attended.mean(dim=1)
-#         fused = self.proj(fused)
-#         return fused
-
-# 消融实验 A5 把 Attention 换成 concat
-# class SimpleCrossModalAttention(nn.Module):
-#     def __init__(self, hidden_dim=256):
-#         super().__init__()
-#         self.proj = nn.Linear(hidden_dim*3, hidden_dim)  # concat -> proj
-#
-#     def forward(self, text_emb, smiles_emb, kg_emb):
-#         # concat 直接替代 attention
-#         fused = torch.cat([text_emb, smiles_emb, kg_emb], dim=1)
-#         fused = self.proj(fused)
-#         return fused
-
-# 消融实验 A5_1 把 Attention 换成 sum
-# class SimpleCrossModalAttention(nn.Module):
-#     def __init__(self, hidden_dim=256):
-#         super().__init__()
-#         self.proj = nn.Linear(hidden_dim, hidden_dim)
-#
-#     def forward(self, text_emb, smiles_emb, kg_emb):
-#         fused = text_emb + smiles_emb + kg_emb  # 加法融合
-#         fused = self.proj(fused)
-#         return fused
-
-# 消融实验 A5_2 把Attention换成Gated Fusion 门控加权融合
-# class SimpleCrossModalAttention(nn.Module):
-#     def __init__(self, hidden_dim=256):
-#         super().__init__()
-#         self.gate_t = nn.Linear(hidden_dim, hidden_dim)
-#         self.gate_s = nn.Linear(hidden_dim, hidden_dim)
-#         self.gate_k = nn.Linear(hidden_dim, hidden_dim)
-#         self.proj = nn.Linear(hidden_dim, hidden_dim)
-#
-#     def forward(self, text_emb, smiles_emb, kg_emb):
-#         # 生成每个模态的门控权重
-#         g_t = torch.sigmoid(self.gate_t(text_emb))
-#         g_s = torch.sigmoid(self.gate_s(smiles_emb))
-#         g_k = torch.sigmoid(self.gate_k(kg_emb))
-#
-#         # 门控加权求和融合
-#         fused = g_t * text_emb + g_s * smiles_emb + g_k * kg_emb
-#         fused = self.proj(fused)
-#         return fused
-
-# 消融实验A5_3 把Attention换成残差式融合Residual Concat
 class SimpleCrossModalAttention(nn.Module):
     def __init__(self, hidden_dim=256):
         super().__init__()
-        self.proj = nn.Linear(hidden_dim * 3, hidden_dim)
-        self.norm = nn.LayerNorm(hidden_dim)
+        self.attention = nn.MultiheadAttention(hidden_dim, num_heads=8, batch_first=True)
+        self.proj = nn.Linear(hidden_dim, hidden_dim)
 
     def forward(self, text_emb, smiles_emb, kg_emb):
-        concat = torch.cat([text_emb, smiles_emb, kg_emb], dim=1)
-        fused = self.proj(concat)
-        fused = self.norm(fused + text_emb + smiles_emb + kg_emb)
+        modalities = torch.stack([text_emb, smiles_emb, kg_emb], dim=1)
+        attended, _ = self.attention(modalities, modalities, modalities)
+        fused = attended.mean(dim=1)
+        fused = self.proj(fused)
         return fused
-
-class SimpleDrugRepresentationModel(nn.Module):
-    def __init__(self, hidden_dim=256):
-        super().__init__()
-        self.encoder = SimpleDrugEncoder(hidden_dim)
-        self.fusion = SimpleCrossModalAttention(hidden_dim)
-
-    def forward(self, text_ids, attention_mask, smiles_input, kg_input):
-        text_emb, smiles_emb, kg_emb = self.encoder(text_ids, attention_mask, smiles_input, kg_input)
-        fused_emb = self.fusion(text_emb, smiles_emb, kg_emb)
-        return fused_emb
-
 
 # ----------------------------
 # 5. 对比损失函数
@@ -397,142 +320,8 @@ def optimized_training(dataset, pos_pairs, drug_ids, epochs=5, batch_size=8, lr=
     print(f"药物初始嵌入已保存，形状: {all_embeddings.shape}")
     return all_embeddings
 
-#消融实验 A7
-# def optimized_training(dataset, pos_pairs, drug_ids, epochs=5, batch_size=8, lr=1e-4, no_contrast=False):
-#     """
-#     若 no_contrast=True: 跳过对比学习 (A7)，只用 encoder 前向生成嵌入并保存。
-#     否则：按原逻辑进行对比学习训练（此处保留最小训练框架；如你已有详细训练循环可替换回去）。
-#     """
-#     device = "cuda" if torch.cuda.is_available() else "cpu"
-#     print(f"使用设备: {device}")
-#
-#     model = SimpleDrugRepresentationModel().to(device)
-#
-#     # ========== A7: 跳过对比学习，直接生成 encoder 输出 ========== #
-#     if no_contrast:
-#         print("⚠️ [A7 Ablation] Skipping contrastive learning — generating encoder outputs only.")
-#         model.eval()
-#
-#         embeddings_list = [None] * len(dataset)   # 按 dataset 顺序保存
-#         failed = 0
-#
-#         with torch.no_grad():
-#             from tqdm import tqdm
-#             for i in tqdm(range(len(dataset)), desc="Generating embeddings (no contrast)"):
-#                 try:
-#                     # dataset[i] 返回: smiles, input_ids, attention_mask, kg, idx
-#                     smiles, input_ids, attention_mask, kg, idx = dataset[i]
-#
-#                     # 添加 batch 维度并移动到 device
-#                     smiles = smiles.unsqueeze(0).to(device)
-#                     input_ids = input_ids.unsqueeze(0).to(device)
-#                     attention_mask = attention_mask.unsqueeze(0).to(device)
-#                     kg = kg.unsqueeze(0).to(device)
-#
-#                     emb = model(input_ids, attention_mask, smiles, kg)  # 返回 (1, hidden_dim)
-#                     embeddings_list[idx] = emb.squeeze(0).cpu()
-#                 except Exception as e:
-#                     # 若单个样本失败，用零向量占位并记录
-#                     failed += 1
-#                     print(f"[Warn] sample idx {i} (dataset idx {idx}) failed: {e}")
-#                     embeddings_list[idx] = torch.zeros(1, model.encoder.text_proj.out_features).squeeze(0)
-#
-#         # 将 list 转为 tensor（按 dataset 索引顺序）
-#         # 确保所有元素都不是 None
-#         for j, v in enumerate(embeddings_list):
-#             if v is None:
-#                 embeddings_list[j] = torch.zeros(model.encoder.text_proj.out_features)
-#
-#         embeddings_tensor = torch.stack(embeddings_list, dim=0)  # [N, D]
-#
-#         # 保存格式与后续 part3 兼容（保存 drug_ids 与 embeddings）
-#         save_path = "models/model/drug_ablation_embeddings_A7.pt"
-#         torch.save({
-#             "drug_ids": drug_ids,
-#             "embeddings": embeddings_tensor,
-#             "model_state": model.state_dict()
-#         }, save_path)
-#
-#         print(f"✅ A7 embeddings saved to: {save_path}  (failed {failed} samples)")
-#         return embeddings_tensor
-#
-#     # ========== 原始/对比学习分支（最小占位实现） ========== #
-#     # 你可以把这里替换为你原来的对比训练实现
-#     print("🚀 Running contrastive training branch (default).")
-#     optimizer = torch.optim.AdamW([
-#         {'params': model.encoder.text_encoder.parameters(), 'lr': lr * 0.1},
-#         {'params': [p for n, p in model.named_parameters() if 'text_encoder' not in n], 'lr': lr}
-#     ], weight_decay=1e-5)
-#
-#     # 这个 dataloader 依据你的原实现可能不同 —— 仅作示范
-#     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: x, num_workers=0)
-#
-#     accumulation_steps = 2
-#     model.train()
-#     for epoch in range(epochs):
-#         total_loss = 0.0
-#         optimizer.zero_grad()
-#         from tqdm import tqdm
-#         for step, batch in enumerate(tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}")):
-#             # 构造对比 batch （你的 create_contrastive_batch 函数）
-#             smiles_batch, text_ids_batch, attention_mask_batch, kg_batch, batch_indices, num_augmented = \
-#                 create_contrastive_batch(batch, pos_pairs, max_augment=1)
-#
-#             if len(batch_indices) <= 1:
-#                 continue
-#
-#             text_ids_batch_masked = mask_text_tokens(text_ids_batch)
-#             smiles_batch_masked = mask_smiles_tokens(smiles_batch)
-#
-#             fused_emb = model(text_ids_batch_masked, attention_mask_batch, smiles_batch_masked, kg_batch)
-#
-#             loss = contrastive_loss(fused_emb, len(batch_indices), num_augmented)
-#             loss = loss / accumulation_steps
-#             loss.backward()
-#
-#             if (step + 1) % accumulation_steps == 0:
-#                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-#                 optimizer.step()
-#                 optimizer.zero_grad()
-#
-#             total_loss += loss.item() * accumulation_steps
-#
-#         print(f"Epoch {epoch+1}, Avg Loss: {total_loss / (step + 1):.6f}")
-#
-#     # 训练完后按原逻辑生成最终嵌入并保存（与 no_contrast 分支类似）
-#     print("生成最终嵌入...")
-#     all_embeddings = []
-#     model.eval()
-#     with torch.no_grad():
-#         for i in tqdm(range(len(dataset)), desc="生成嵌入"):
-#             smiles, input_ids, attn_mask, kg, idx = dataset[i]
-#
-#             smiles = smiles.unsqueeze(0).to(device)
-#             input_ids = input_ids.unsqueeze(0).to(device)
-#             attn_mask = attn_mask.unsqueeze(0).to(device)
-#             kg = kg.unsqueeze(0).to(device)
-#
-#             try:
-#                 embedding = model(input_ids, attn_mask, smiles, kg)
-#                 all_embeddings.append(embedding.cpu())
-#             except Exception as e:
-#                 print(f"处理样本 {i} 时出错: {e}")
-#                 zero_embedding = torch.zeros(1, model.encoder.text_proj.out_features)
-#                 all_embeddings.append(zero_embedding)
-#
-#     all_embeddings = torch.cat(all_embeddings, dim=0)
-#     torch.save({
-#         "drug_ids": drug_ids,
-#         "embeddings": all_embeddings,
-#         "model_state": model.state_dict()
-#     }, "models/model/drug_initial_embeddings.pt")
-#
-#     print(f"药物初始嵌入已保存，形状: {all_embeddings.shape}")
-#     return all_embeddings
-
-
 # ----------------------------
-# 7. 使用示例（修复SMILES处理）
+# 7. 开始训练
 # ----------------------------
 if __name__ == "__main__":
     torch.manual_seed(42)
@@ -545,15 +334,7 @@ if __name__ == "__main__":
     drug_ids = smiles_df["drugbank_id"].tolist()
     smiles_list = smiles_df["smiles"].tolist()
 
-    # if len(drug_ids) > 2000:
-    #     print(f"数据量较大 ({len(drug_ids)} 个药物)，进行采样...")
-    #     indices = random.sample(range(len(drug_ids)), 2000)
-    #     drug_ids = [drug_ids[i] for i in indices]
-    #     smiles_list = [smiles_list[i] for i in indices]
-    # 改为直接使用完整数据：
-    print(f"使用完整数据集: {len(drug_ids)} 个药物")
-
-    # SMILES -> token序列（修复长度处理）
+    # SMILES -> token序列
     def tokenize_smiles(smiles):
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
@@ -612,11 +393,6 @@ if __name__ == "__main__":
             if r in rel_vocab:
                 vec[rel_vocab[r]] = 1.0
         kg_list.append(vec)
-    # A3去知识图谱特征，将所有药物的知识图谱特征设为全0
-    # kg_list = []
-    # for did in tqdm(drug_ids):
-    #     vec = np.zeros(50, dtype=np.float32)  # 全0
-    #     kg_list.append(vec)
 
     # 4) 正样本对
     print("构建正样本对...")
@@ -636,13 +412,5 @@ if __name__ == "__main__":
 
     # 开始训练
     embeddings = optimized_training(dataset, pos_pairs, drug_ids, epochs=3, batch_size=4, lr=1e-4)
-    # =============================
-    # A7 消融实验：去掉对比学习
-    # =============================
-    # embeddings = optimized_training(
-    #     dataset, pos_pairs, drug_ids,
-    #     epochs=3, batch_size=4, lr=1e-4,
-    #     no_contrast=True  # ✅ 启用A7模式
-    # )
 
     print("训练完成!")
