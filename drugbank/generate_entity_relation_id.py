@@ -53,10 +53,10 @@ def generate_entity_relation_with_embeddings(kg_csv, embedding_file, entity_out,
 # 用法
 entity2id, relation2id = generate_entity_relation_with_embeddings(
     "drugbank_kg_triples_cleaned.csv",
-    "D:/study/gnn/DDKG-main/DDKG-main/models/model/drug_ablation_embeddings_A5_3.pt",
-    "entity2id_A5_3.txt",
-    "relation2id_A5_3.txt",
-    "D:/study/gnn/DDKG-main/DDKG-main/models/model/entity_embeddings_A5_3.pt"
+    "model/drug_initial_embeddings.pt",
+    "entity2id.txt",
+    "relation2id.txt",
+    "model/entity_embeddings.pt"
 )
 
 # entity2id.txt

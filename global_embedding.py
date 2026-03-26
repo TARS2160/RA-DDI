@@ -133,10 +133,6 @@ class RelationalAttentionRGCN(nn.Module):
         self.rgcn_layers = nn.ModuleList([
             RGCNAggregator(embed_dim, num_relations) for _ in range(num_layers)
         ])
-        # 消融实验 A6
-        # self.rgcn_layers = nn.ModuleList([
-        #     SimpleGCNAggregator(embed_dim) for _ in range(num_layers)
-        # ])
         self.attention = nn.MultiheadAttention(embed_dim, num_heads=4)
 
     def forward(self, drug_emb, drug_entity_indices, adj_entity, adj_relation, edge_weights):
@@ -150,7 +146,7 @@ class RelationalAttentionRGCN(nn.Module):
         attn_output, _ = self.attention(x, x, x)
         return attn_output.squeeze(0)
 
-==================== 模型 ====================
+#==================== 模型 ====================
 class RelationalAttentionRGCN(nn.Module):
     def __init__(self, num_entities, num_relations, embed_dim, num_layers):
         super(RelationalAttentionRGCN, self).__init__()
@@ -332,10 +328,10 @@ def train_global_embeddings(embeddings_file, kg_file, output_file, entity2id_fil
 
 # ==================== 开始训练 ====================
 if __name__ == "__main__":
-    embeddings_file = "models/model/drug_ablation_embeddings_A5_3.pt"  #drug_initial_embeddings.pt
-    kg_file = "data/drugbank/drugbank_kg_triples_cleaned.csv"
-    entity2id_file = "data/drugbank/entity2id_A5_3.txt"
-    relation2id_file = "data/drugbank/relation2id_A5_3.txt"
-    output_file = "models/model/drug_global_embeddings_ablation_A5_3_222.pt"
+    embeddings_file = "model/drug_initial_embeddings.pt"  #drug_initial_embeddings.pt
+    kg_file = "drugbank/drugbank_kg_triples_cleaned.csv"
+    entity2id_file = "drugbank/entity2id.txt"
+    relation2id_file = "drugbank/relation2id.txt"
+    output_file = "model/drug_global_embeddings.pt"
 
     train_global_embeddings(embeddings_file, kg_file, output_file, entity2id_file, relation2id_file)
