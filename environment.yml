@@ -1,0 +1,47 @@
+name: ra-ddi
+
+channels:
+  - dglteam/label/cu121
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10.18
+  - pip=25.2
+
+  # Core numerical and data-processing packages
+  - numpy=1.23.5
+  - pandas=2.3.2
+  - scipy=1.15.3
+  - scikit-learn=1.7.1
+  - networkx=2.4
+  - tqdm=4.67.1
+  - pyyaml=6.0.2
+  - requests=2.28.1
+  - h5py=3.14.0
+
+  # Scientific visualization
+  - matplotlib=3.10.5
+  - seaborn=0.13.2
+
+  # Cheminformatics and biomedical data processing
+  - rdkit=2025.03.6
+  - biopython=1.85
+
+  # PyTorch and CUDA 12.1
+  - pytorch=2.1.2
+  - torchvision=0.16.2
+  - torchaudio=2.1.2
+  - pytorch-cuda=12.1
+
+  # DGL CUDA build
+  - dgl=2.0.0.cu121
+
+  - pip:
+      - gensim==4.4.0
+      - ogb==1.3.6
+      - rdflib==7.1.4
+
+# Baseline models may require separate environments or additional packages.
