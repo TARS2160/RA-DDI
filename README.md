@@ -279,7 +279,7 @@ A separate Python environment is recommended.
 Using Conda:
 
 ```bash
-conda create -n ra-ddi python=3.8
+conda create -n ra-ddi python=3.10
 conda activate ra-ddi
 ```
 
