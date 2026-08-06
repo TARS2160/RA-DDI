@@ -75,3 +75,10 @@ def process_nt_file(nt_file_path, csv_file_path, output_file_path):
         print(f"Finished, save to: {output_file_path}")
     except Exception as e:
         print(f"Error: {e}")
+
+if __name__ == "__main__":
+    nt_file_path = "drug_patients.nt"  
+    csv_file_path = "./drugbank/drugbank_vocabulary.csv"  
+    output_file_path = "drug_patients_expansion.nt" 
+
+    process_nt_file(nt_file_path, csv_file_path, output_file_path)
