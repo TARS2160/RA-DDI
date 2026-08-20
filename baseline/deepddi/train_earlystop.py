@@ -1,22 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Train/evaluate a DeepDDI-style MLP on the shared prepared.csv + seed/fold npz splits.
-
-Why this script exists:
-- The original run_DeepDDI.py in deepddi-master is a pretrained inference script.
-- For reviewer-safe benchmark experiments, every baseline must be retrained on the
-  same rows, same negative samples, same split indices, and same metrics.
-
-Expected prepared.csv columns:
-- two drug-id columns, e.g. drug1/drug2, head/tail, d1/d2, left/right, etc.
-- one label column, e.g. label/y/relation/class, etc.
-The script auto-detects common names; use --drug1_col/--drug2_col/--label_col if needed.
-
-Expected split npz keys:
-- train_idx/val_idx/test_idx or train/valid/test or *_mask variants.
-The script auto-detects common keys.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -124,7 +105,6 @@ def detect_col(df: pd.DataFrame, candidates: Sequence[str], explicit: Optional[s
     for cand in candidates:
         if cand.lower() in lower_map:
             return lower_map[cand.lower()]
-    # fallback: simple regex patterns
     for c in df.columns:
         lc = c.lower()
         if role == "drug1" and re.search(r"(drug|node|entity).*(1|a|left)|^(head|src|source)$", lc):
@@ -173,7 +153,6 @@ def parse_seed_fold(split_npz: str) -> Tuple[Optional[int], Optional[int]]:
 
 
 def norm_id(x) -> str:
-    # Most prepared files use DrugBank-like DBxxxxx ids. Uppercasing helps DB0001/db0001 mismatches.
     return str(x).strip().upper()
 
 
@@ -262,7 +241,6 @@ def encode_labels(labels: Iterable, label_order: Optional[str]) -> Tuple[np.ndar
         if missing:
             raise ValueError(f"--label_order misses labels present in data: {missing}")
     else:
-        # Stable deterministic order: numeric labels numerically, otherwise string order.
         uniq = sorted(raw.unique().tolist(), key=lambda x: (not re.fullmatch(r"-?\d+", x), int(x) if re.fullmatch(r"-?\d+", x) else x))
         classes = uniq
     label_to_id = {lab: i for i, lab in enumerate(classes)}
@@ -325,7 +303,6 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, prob: np.ndarray) ->
         out[f"precision_{avg}"] = float(p)
         out[f"recall_{avg}"] = float(r)
         out[f"f1_{avg}"] = float(f1)
-    # AUC/AUPRC can fail if a class is absent in y_true of a small test fold.
     try:
         if prob.shape[1] == 2:
             out["roc_auc_macro_ovr"] = float(roc_auc_score(y_true, prob[:, 1]))
@@ -385,8 +362,6 @@ def main() -> None:
 
     train_loader = make_loader(X, y, train_idx, args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-    # Early stopping is based on a validation metric, not on test performance.
-    # This keeps every baseline reviewer-safe: test data are only used once after training.
     best_val = -float("inf")
     best_epoch = 0
     best_state = None
@@ -462,7 +437,6 @@ def main() -> None:
     test_metrics, y_pred, prob = evaluate(model, X, y, test_idx, args.batch_size, device, args.num_workers)
     id_to_label = {v: k for k, v in label_to_id.items()}
 
-    # Save artifacts.
     pd.DataFrame(history).to_csv(outdir / "history.csv", index=False)
     with open(outdir / "label_mapping.json", "w", encoding="utf-8") as f:
         json.dump({"label_to_id": label_to_id, "id_to_label": id_to_label}, f, ensure_ascii=False, indent=2)
@@ -482,7 +456,6 @@ def main() -> None:
     if args.save_model:
         torch.save({"model_state": model.state_dict(), "args": vars(args), "label_to_id": label_to_id}, outdir / "model.pt")
 
-    # One-row metrics file, designed to concatenate across methods.
     result_row = {
         "method": "DeepDDI_shared",
         "dataset": args.dataset,
