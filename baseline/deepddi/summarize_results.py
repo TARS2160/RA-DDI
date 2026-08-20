@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-"""Concatenate DeepDDI metrics.csv files and compute mean/std over seed-fold repeated runs."""
 from __future__ import annotations
 
 import argparse
