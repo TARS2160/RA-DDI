@@ -1,21 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Batch runner for DrugDAGT commands in run.txt.
-
-功能：
-1. 读取同目录下的 run.txt（如果没有，则尝试 run(1).txt）。
-2. 跳过空行和以 # 开头的注释行。
-3. 不自动删除 Tee-Object，不自动修正 split 路径，不自动修正 split_seed/split_fold。
-4. 每条命令原样运行，并将终端输出单独保存为 log。
-5. 某条命令失败时，不停止整个批处理，继续运行下一条。
-6. 最后汇总成功、失败、未运行/跳过的命令，并保存 summary CSV。
-
-使用方式：
-- 将本脚本放到 DrugDAGT-main/code 目录。
-- 将 run.txt 放到同一个目录。
-- 在 PyCharm 中右键本脚本 -> Run。
-"""
-
 from __future__ import annotations
 
 import csv
@@ -29,36 +11,11 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 
-# =========================
-# 用户可改配置
-# =========================
-
-# 只检查命令、不真正运行。正式跑请保持 False。
-DRY_RUN = False
-
-# 失败后是否继续下一条。你的需求是失败后跳过，所以保持 False。
-STOP_ON_FAILURE = False
-
-# 命令文件名。默认读取 run.txt；如果没有，会尝试 run(1).txt。
-RUN_FILE_NAME = "run.txt"
-
-# log 根目录，会自动创建。
-LOG_ROOT = Path("strict_results") / "DrugDAGT" / "logs" / "batch_from_run_txt"
-
-# summary 输出位置。
-SUMMARY_DIR = Path("strict_results") / "DrugDAGT"
-
-
-# =========================
-# 工具函数
-# =========================
-
 def now_str() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def sanitize_filename(name: str, max_len: int = 120) -> str:
-    """将 save_dir/split 名转成安全文件名。"""
     name = name.strip().strip('"').strip("'")
     name = name.replace("\\", "_").replace("/", "_").replace(":", "_")
     name = re.sub(r"[^0-9A-Za-z._\-\u4e00-\u9fff]+", "_", name)
@@ -69,13 +26,6 @@ def sanitize_filename(name: str, max_len: int = 120) -> str:
 
 
 def get_arg_value(command: str, arg_name: str) -> str:
-    """
-    从命令字符串中读取参数值。
-    支持：
-      --save_dir strict_results/...
-      --save_dir "strict_results/..."
-    不修改命令本身。
-    """
     pattern = rf"{re.escape(arg_name)}\s+(\"[^\"]+\"|'[^']+'|\S+)"
     m = re.search(pattern, command)
     if not m:
@@ -84,7 +34,6 @@ def get_arg_value(command: str, arg_name: str) -> str:
 
 
 def infer_command_name(command: str, index: int) -> str:
-    """优先用 --save_dir 的最后一级目录作为 log 名；没有则用 --data_path 推断。"""
     save_dir = get_arg_value(command, "--save_dir")
     if save_dir:
         name = Path(save_dir.replace("\\", "/")).name
@@ -101,10 +50,6 @@ def infer_command_name(command: str, index: int) -> str:
 
 
 def load_commands(run_file: Path) -> Tuple[List[Dict[str, str]], int, int]:
-    """
-    返回 active commands，同时统计空行和注释行。
-    注释行定义：strip 后以 # 开头。
-    """
     active: List[Dict[str, str]] = []
     empty_count = 0
     comment_count = 0
@@ -123,43 +68,10 @@ def load_commands(run_file: Path) -> Tuple[List[Dict[str, str]], int, int]:
     return active, empty_count, comment_count
 
 
-def check_command_warnings(command: str) -> List[str]:
-    """
-    只做提示，不自动修正、不阻止运行。
-    """
-    warnings: List[str] = []
-
-    if "train.py" not in command:
-        warnings.append("命令中没有 train.py，可能不是训练命令。")
-
-    if "Tee-Object" in command or "2>&1" in command:
-        warnings.append("命令中仍包含 PowerShell 重定向或 Tee-Object；本脚本不会自动删除，可能导致运行失败。")
-
-    if "--data_path" not in command:
-        warnings.append("缺少 --data_path。")
-    if "--data_path_right" not in command:
-        warnings.append("缺少 --data_path_right。")
-    if "--save_dir" not in command:
-        warnings.append("缺少 --save_dir。")
-    if "--shared_dataset" not in command:
-        warnings.append("缺少 --shared_dataset。")
-    if "--split_seed" not in command:
-        warnings.append("缺少 --split_seed。")
-    if "--split_fold" not in command:
-        warnings.append("缺少 --split_fold。")
-
-    return warnings
-
-
 def run_one_command(command: str, log_path: Path, cwd: Path) -> int:
-    """
-    执行一条命令，将 stdout/stderr 同时输出到控制台和 log。
-    返回进程 return code。
-    """
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
-    # 让 Python 子进程尽量实时输出。
     env["PYTHONUNBUFFERED"] = "1"
 
     start = time.time()
@@ -185,7 +97,6 @@ def run_one_command(command: str, log_path: Path, cwd: Path) -> int:
             log.write(msg)
             return 0
 
-        # shell=True 是为了直接运行 run.txt 中的整行 Windows 命令。
         process = subprocess.Popen(
             command,
             cwd=str(cwd),
@@ -254,11 +165,6 @@ def write_summary_csv(summary_path: Path, rows: List[Dict[str, str]]) -> None:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-
-
-# =========================
-# 主程序
-# =========================
 
 def main() -> int:
     script_dir = Path(__file__).resolve().parent
@@ -340,7 +246,6 @@ def main() -> int:
             return_code = -1
             print(f"[EXCEPTION] Command {idx} raised exception: {repr(e)}. Continue to next command.")
 
-            # 确保异常也写入对应 log。
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("a", encoding="utf-8", errors="replace") as log:
                 log.write("\n" + "=" * 120 + "\n")
@@ -363,7 +268,6 @@ def main() -> int:
         if status != "SUCCESS":
             failed_rows.append(row)
 
-        # 每条跑完都更新一次 summary，防止中途断电丢记录。
         write_summary_csv(summary_csv, results)
         write_summary_csv(latest_summary_csv, results)
 
@@ -410,7 +314,6 @@ def main() -> int:
 
     print("=" * 120)
 
-    # 有失败也返回 0，避免 PyCharm 把整个批处理标红；具体失败看 summary。
     return 0
 
 
